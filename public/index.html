@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nalanda RAG - Test UI</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #0f1117; color: #e2e8f0; min-height: 100vh; padding: 2rem; }
+    h1 { font-size: 1.4rem; font-weight: 600; margin-bottom: 0.25rem; color: #f8fafc; }
+    .subtitle { color: #94a3b8; font-size: 0.85rem; margin-bottom: 2rem; }
+    .card { background: #1e2330; border: 1px solid #2d3548; border-radius: 10px; padding: 1.5rem; margin-bottom: 1.5rem; }
+    .card h2 { font-size: 0.9rem; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 1rem; }
+    .status-row { display: flex; gap: 2rem; margin-bottom: 0.5rem; }
+    .stat { display: flex; flex-direction: column; }
+    .stat .val { font-size: 1.6rem; font-weight: 700; color: #60a5fa; }
+    .stat .lbl { font-size: 0.75rem; color: #64748b; }
+    button { background: #3b82f6; color: white; border: none; border-radius: 6px; padding: 0.55rem 1.2rem; font-size: 0.875rem; cursor: pointer; font-weight: 500; transition: background 0.15s; }
+    button:hover { background: #2563eb; }
+    button:disabled { background: #334155; color: #64748b; cursor: not-allowed; }
+    .btn-danger { background: #ef4444; }
+    .btn-danger:hover { background: #dc2626; }
+    .query-row { display: flex; gap: 0.75rem; }
+    input[type="text"] { flex: 1; background: #0f1117; border: 1px solid #2d3548; border-radius: 6px; padding: 0.55rem 0.9rem; color: #e2e8f0; font-size: 0.875rem; outline: none; }
+    input[type="text"]:focus { border-color: #3b82f6; }
+    .result { border: 1px solid #2d3548; border-radius: 8px; padding: 1rem; margin-bottom: 0.75rem; background: #161b27; }
+    .result-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem; }
+    .result-source { font-size: 0.8rem; font-weight: 600; color: #60a5fa; }
+    .result-score { font-size: 0.75rem; color: #94a3b8; background: #1e2330; padding: 0.2rem 0.5rem; border-radius: 4px; }
+    .result-content { font-size: 0.82rem; color: #cbd5e1; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+    .log { font-family: monospace; font-size: 0.78rem; color: #94a3b8; background: #0a0d14; border: 1px solid #1e2330; border-radius: 6px; padding: 0.75rem; min-height: 3rem; max-height: 10rem; overflow-y: auto; }
+    .log .ok  { color: #4ade80; }
+    .log .err { color: #f87171; }
+    .log .inf { color: #94a3b8; }
+    #topk-wrap { display: flex; align-items: center; gap: 0.5rem; font-size: 0.82rem; color: #94a3b8; margin-top: 0.75rem; }
+    #topk-wrap input { width: 3rem; padding: 0.3rem 0.4rem; }
+  </style>
+</head>
+<body>
+  <h1>Nalanda RAG — Test UI</h1>
+  <p class="subtitle">Local test interface (no Electron required)</p>
+
+  <div class="card">
+    <h2>Status</h2>
+    <div class="status-row">
+      <div class="stat"><span class="val" id="doc-count">—</span><span class="lbl">documents</span></div>
+      <div class="stat"><span class="val" id="chunk-count">—</span><span class="lbl">chunks</span></div>
+      <div class="stat"><span class="val" id="model-name">—</span><span class="lbl">embed model</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Index</h2>
+    <p style="font-size:0.82rem;color:#94a3b8;margin-bottom:1rem;">
+      Drop PDFs into <code style="color:#60a5fa">./data/pdfs/</code> then click the button.
+      This calls Ollama — it will take a moment on first run.
+    </p>
+    <button id="btn-index">Index PDFs</button>
+    <div class="log" id="index-log" style="margin-top:0.75rem"></div>
+  </div>
+
+  <div class="card">
+    <h2>Query</h2>
+    <div class="query-row">
+      <input type="text" id="question" placeholder="Ask something about your documents..." />
+      <button id="btn-query">Ask</button>
+    </div>
+    <div id="topk-wrap">
+      <span>Top</span>
+      <input type="number" id="topk" value="3" min="1" max="10">
+      <span>results</span>
+    </div>
+    <div id="results" style="margin-top:1rem"></div>
+  </div>
+
+  <script>
+    const BASE = ''  // same origin
+
+    async function fetchStatus() {
+      try {
+        const r = await fetch(`${BASE}/api/status`)
+        const d = await r.json()
+        document.getElementById('doc-count').textContent   = d.index.documents
+        document.getElementById('chunk-count').textContent = d.index.chunks
+        document.getElementById('model-name').textContent  = d.config.embed_model
+      } catch {
+        document.getElementById('doc-count').textContent = 'offline'
+      }
+    }
+
+    function log(el, msg, type = 'inf') {
+      const span = document.createElement('span')
+      span.className = type
+      span.textContent = `[${new Date().toLocaleTimeString()}] ${msg}\n`
+      el.appendChild(span)
+      el.scrollTop = el.scrollHeight
+    }
+
+    document.getElementById('btn-index').addEventListener('click', async () => {
+      const btn = document.getElementById('btn-index')
+      const logEl = document.getElementById('index-log')
+      logEl.innerHTML = ''
+      btn.disabled = true
+      btn.textContent = 'Indexing...'
+      log(logEl, 'Sending POST /api/index ...')
+      try {
+        const r = await fetch(`${BASE}/api/index`, { method: 'POST' })
+        const d = await r.json()
+        if (!r.ok) { log(logEl, `Error: ${d.error}`, 'err'); return }
+        log(logEl, `Indexed ${d.documents_indexed} doc(s), ${d.total_chunks} chunks`, 'ok')
+        d.files.forEach(f => log(logEl, `  ${f.name} (${f.pages} pages)`))
+        fetchStatus()
+      } catch (e) {
+        log(logEl, `Network error: ${e.message}`, 'err')
+      } finally {
+        btn.disabled = false
+        btn.textContent = 'Index PDFs'
+      }
+    })
+
+    document.getElementById('btn-query').addEventListener('click', async () => {
+      const q   = document.getElementById('question').value.trim()
+      const k   = parseInt(document.getElementById('topk').value) || 3
+      const out = document.getElementById('results')
+      if (!q) return
+      out.innerHTML = '<div style="color:#64748b;font-size:0.82rem">Searching...</div>'
+      try {
+        const r = await fetch(`${BASE}/api/query`, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ question: q, top_k: k })
+        })
+        const d = await r.json()
+        if (!r.ok) { out.innerHTML = `<div style="color:#f87171">${d.error}</div>`; return }
+        if (d.results.length === 0) { out.innerHTML = '<div style="color:#64748b">No results.</div>'; return }
+        out.innerHTML = d.results.map((res, i) => `
+          <div class="result">
+            <div class="result-header">
+              <span class="result-source">${res.source} · chunk #${res.chunk_index}</span>
+              <span class="result-score">score ${res.similarity_score.toFixed(4)}</span>
+            </div>
+            <div class="result-content">${res.content}</div>
+          </div>
+        `).join('')
+      } catch (e) {
+        out.innerHTML = `<div style="color:#f87171">Network error: ${e.message}</div>`
+      }
+    })
+
+    document.getElementById('question').addEventListener('keydown', e => {
+      if (e.key === 'Enter') document.getElementById('btn-query').click()
+    })
+
+    fetchStatus()
+    setInterval(fetchStatus, 10_000)
+  </script>
+</body>
+</html>

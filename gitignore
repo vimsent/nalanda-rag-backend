@@ -1,0 +1,13 @@
+node_modules/
+.env
+
+# Generated at runtime - do not commit (can be regenerated with POST /api/index)
+data/embeddings.json
+
+# Keep the pdfs folder tracked but not its contents (user data)
+data/pdfs/*
+!data/pdfs/.gitkeep
+
+*.log
+.DS_Store
+Thumbs.db
