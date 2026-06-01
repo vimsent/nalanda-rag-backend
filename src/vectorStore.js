@@ -41,17 +41,36 @@ function clear() {
 function chunkCount()    { return Object.keys(_store).length }
 function documentCount() { return _sources.size }
 
-function search(queryEmbedding, topK = 3) {
+function search(queryEmbedding, queryText, topK = 3) {
   const entries = Object.values(_store)
   if (entries.length === 0) return []
 
+  const queryLower = queryText.toLowerCase()
+  // Only boost on words longer than 3 chars to ignore stopwords
+  const queryWords = queryLower.split(/\s+/).filter(w => w.length > 3)
+
   return entries
-    .map(e => ({
-      source:           e.source,
-      content:          e.content,
-      chunk_index:      e.chunkIndex,
-      similarity_score: cosineSimilarity(queryEmbedding, e.embedding)
-    }))
+    .map(e => {
+      const semantic     = cosineSimilarity(queryEmbedding, e.embedding)
+      const contentLower = e.content.toLowerCase()
+
+      // Exact phrase in chunk → big boost
+      // Partial word overlap → smaller boost
+      let keywordBoost = 0
+      if (contentLower.includes(queryLower)) {
+        keywordBoost = 0.3
+      } else if (queryWords.length > 0) {
+        const matched = queryWords.filter(w => contentLower.includes(w)).length
+        keywordBoost = (matched / queryWords.length) * 0.15
+      }
+
+      return {
+        source:           e.source,
+        content:          e.content,
+        chunk_index:      e.chunkIndex,
+        similarity_score: Math.min(1, semantic + keywordBoost)
+      }
+    })
     .sort((a, b) => b.similarity_score - a.similarity_score)
     .slice(0, topK)
 }

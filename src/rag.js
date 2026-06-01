@@ -11,18 +11,30 @@ let _indexing = false
 
 // Split text into overlapping windows of ~chunkSize characters.
 // Overlap preserves sentence context that would otherwise be cut at a boundary.
-function splitIntoChunks(text, chunkSize = 500, overlap = 100) {
-  const chunks = []
-  const step   = chunkSize - overlap
-  let start    = 0
+function splitIntoChunks(text, maxSize = 300, overlap = 50) {
+  const normalized = text.replace(/\s+/g, ' ').trim()
 
-  while (start < text.length) {
-    const end   = Math.min(start + chunkSize, text.length)
-    const chunk = text.slice(start, end).trim()
-    if (chunk.length >= 30) chunks.push(chunk)  // discard near-empty slices
-    start += step
+  // Split at sentence boundaries, keeping the punctuation with the sentence
+  const sentences = normalized
+    .split(/(?<=[.!?])\s+/)
+    .filter(s => s.trim().length > 0)
+
+  if (sentences.length === 0) return []
+
+  const chunks = []
+  let current = ''
+
+  for (const sentence of sentences) {
+    if (current.length + sentence.length + 1 > maxSize && current.length > 0) {
+      if (current.trim().length >= 30) chunks.push(current.trim())
+      // Carry the last `overlap` chars into the next chunk for continuity
+      current = current.slice(-overlap) + ' ' + sentence
+    } else {
+      current += (current ? ' ' : '') + sentence
+    }
   }
 
+  if (current.trim().length >= 30) chunks.push(current.trim())
   return chunks
 }
 
@@ -113,7 +125,7 @@ async function queryIndex(question, topK = config.TOP_K) {
     throw new Error('Index is empty. Call POST /api/index first.')
   }
   const embedding = await getEmbedding(question)
-  return vectorStore.search(embedding, topK)
+  return vectorStore.search(embedding, question, topK)  // <-- agrega question
 }
 
 module.exports = { indexDocuments, queryIndex, splitIntoChunks, getEmbedding }
