@@ -9,5 +9,11 @@ module.exports = {
   CHUNK_SIZE:      parseInt(process.env.CHUNK_SIZE)   || 500,
   CHUNK_OVERLAP:   parseInt(process.env.CHUNK_OVERLAP) || 100,
   TOP_K:           parseInt(process.env.TOP_K)         || 3,
-  NODE_ENV:        process.env.NODE_ENV               || 'development'
+  NODE_ENV:        process.env.NODE_ENV               || 'development',
+
+  LLM_PROVIDER:      process.env.LLM_PROVIDER      || 'ollama',
+  LLM_MODEL:         process.env.LLM_MODEL          || 'deepseek-r1:8b',
+  OPENAI_API_KEY:    process.env.OPENAI_API_KEY     || '',
+  ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY  || '',
+  GEMINI_API_KEY:    process.env.GEMINI_API_KEY     || '',
 }

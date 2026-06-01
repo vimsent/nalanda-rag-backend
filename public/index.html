@@ -34,6 +34,10 @@
     .log .inf { color: #94a3b8; }
     #topk-wrap { display: flex; align-items: center; gap: 0.5rem; font-size: 0.82rem; color: #94a3b8; margin-top: 0.75rem; }
     #topk-wrap input { width: 3rem; padding: 0.3rem 0.4rem; }
+    .answer-box { background: #0a0d14; border: 1px solid #1e3a5f; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; font-size: 0.85rem; color: #e2e8f0; line-height: 1.7; white-space: pre-wrap; word-break: break-word; }
+    .sources-list { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.75rem; }
+    .source-tag { font-size: 0.72rem; background: #1e2330; border: 1px solid #2d3548; border-radius: 4px; padding: 0.2rem 0.5rem; color: #60a5fa; }
+    select { background: #0f1117; border: 1px solid #2d3548; border-radius: 6px; padding: 0.5rem 0.75rem; color: #e2e8f0; font-size: 0.875rem; }
   </style>
 </head>
 <body>
@@ -72,9 +76,71 @@
     </div>
     <div id="results" style="margin-top:1rem"></div>
   </div>
+  
+  <div class="card">
+    <h2>Chat (RAG + LLM)</h2>
+    <div style="display:flex;gap:0.75rem;margin-bottom:0.75rem;flex-wrap:wrap">
+      <select id="provider">
+        <option value="ollama">Ollama (local)</option>
+        <option value="openai">OpenAI</option>
+        <option value="anthropic">Anthropic</option>
+        <option value="gemini">Gemini</option>
+      </select>
+      <input type="text" id="chat-model" placeholder="modelo (ej: deepseek-r1:8b)" style="flex:1;min-width:160px">
+      <input type="text" id="chat-apikey" placeholder="api key (cloud providers)" style="flex:1;min-width:160px">
+    </div>
+    <div class="query-row">
+      <input type="text" id="chat-question" placeholder="Hazle una pregunta a tus documentos..." />
+      <button id="btn-chat">Preguntar</button>
+    </div>
+    <div id="chat-out" style="margin-top:1rem"></div>
+  </div>
+
+
 
   <script>
     const BASE = ''  // same origin
+
+    document.getElementById('btn-chat').addEventListener('click', async () => {
+  const q       = document.getElementById('chat-question').value.trim()
+  const provider = document.getElementById('provider').value
+  const model   = document.getElementById('chat-model').value.trim()
+  const apiKey  = document.getElementById('chat-apikey').value.trim()
+  const out     = document.getElementById('chat-out')
+  if (!q) return
+
+  out.innerHTML = '<div style="color:#64748b;font-size:0.82rem">Generando respuesta...</div>'
+  document.getElementById('btn-chat').disabled = true
+
+  try {
+    const body = { question: q, provider }
+    if (model)  body.model   = model
+    if (apiKey) body.api_key = apiKey
+
+    const r = await fetch(`${BASE}/api/chat`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(body)
+    })
+    const d = await r.json()
+    if (!r.ok) { out.innerHTML = `<div style="color:#f87171">${d.error}</div>`; return }
+
+    out.innerHTML = `
+      <div class="answer-box">${d.answer}</div>
+      <div class="sources-list">
+        ${d.sources.map(s => `<span class="source-tag">${s.source} · ${s.score.toFixed(3)}</span>`).join('')}
+      </div>
+    `
+  } catch (e) {
+    out.innerHTML = `<div style="color:#f87171">Error: ${e.message}</div>`
+  } finally {
+    document.getElementById('btn-chat').disabled = false
+  }
+})
+
+document.getElementById('chat-question').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('btn-chat').click()
+})
 
     async function fetchStatus() {
       try {

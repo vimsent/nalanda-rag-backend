@@ -65,6 +65,33 @@ app.post('/api/index', async (req, res) => {
 // POST /api/query
 // Body: { "question": "string", "top_k": 3 }
 // Returns top-K chunks most similar to the question, with source + score.
+const { generate } = require('./llm')
+
+// POST /api/chat
+// Body: { question, provider, model?, api_key?, top_k? }
+// Hace retrieval + generación en un solo paso
+app.post('/api/chat', async (req, res) => {
+  const { question, provider = 'ollama', model, api_key, top_k = config.TOP_K } = req.body
+
+  if (!question?.trim()) {
+    return res.status(400).json({ error: '"question" es requerido' })
+  }
+
+  try {
+    const k       = Math.max(1, Math.min(Number(top_k) || config.TOP_K, 10))
+    const chunks  = await queryIndex(question.trim(), k)
+    const answer  = await generate(question.trim(), chunks, provider, model, api_key)
+
+    res.json({
+      question: question.trim(),
+      answer,
+      sources: chunks.map(c => ({ source: c.source, score: c.similarity_score }))
+    })
+  } catch (err) {
+    console.error('[chat] error:', err.message)
+    res.status(500).json({ error: err.message })
+  }
+})
 // ---------------------------------------------------------------------------
 app.post('/api/query', async (req, res) => {
   const { question, top_k = config.TOP_K } = req.body
